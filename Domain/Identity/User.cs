@@ -1,6 +1,6 @@
 namespace Domain.Identity;
 
-// Domain Layer
+// TODO
 public class User
 {
     public Guid Id { get; private set; }

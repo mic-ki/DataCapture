@@ -4,15 +4,6 @@ namespace Application.Services.Mapper;
 
 using System.Linq.Expressions;
 
-public interface IMapper<in TSource, out TTarget>
-    where TSource : class
-    where TTarget : class, new()
-{
-    TTarget Map(TSource source);
-    TTarget MapDirect(TSource source);
-    IEnumerable<TTarget> MapCollection(IEnumerable<TSource> sources);
-    IEnumerable<TTarget> MapDirectCollection(IEnumerable<TSource> sources);
-}
 
 public class Mapper<TSource, TTarget> : IMapper<TSource, TTarget>
     where TSource : class
@@ -63,7 +54,7 @@ public class Mapper<TSource, TTarget> : IMapper<TSource, TTarget>
     {
         var sourceParam = Expression.Parameter(typeof(TSource), "src");
         var target = Expression.Variable(typeof(TTarget), "trg");
-        
+
         var assignments = new List<Expression>
         {
             Expression.Assign(target, Expression.New(typeof(TTarget)))
@@ -74,29 +65,32 @@ public class Mapper<TSource, TTarget> : IMapper<TSource, TTarget>
             if (!targetProp.CanWrite) continue;
 
             var sourceProp = typeof(TSource).GetProperty(
-                targetProp.Name, 
+                targetProp.Name,
                 BindingFlags.Public | BindingFlags.Instance
             );
 
             if (sourceProp == null || !sourceProp.CanRead) continue;
 
             var sourceValue = Expression.Property(sourceParam, sourceProp);
-            var convertedValue = targetProp.PropertyType != sourceProp.PropertyType 
-                ? Expression.Convert(sourceValue, targetProp.PropertyType) 
+            var convertedValue = targetProp.PropertyType != sourceProp.PropertyType
+                ? Expression.Convert(sourceValue, targetProp.PropertyType)
                 : (Expression)sourceValue;
 
-            assignments.Add(
-                Expression.Call(target, targetProp.SetMethod!, convertedValue)
-            );
+            var assignExpr = Expression.Call(target, targetProp.SetMethod!, convertedValue);
+            assignments.Add(assignExpr);
         }
 
+        // 💡 Přidáme návrat hodnoty na konec Expression.Block
+        assignments.Add(target);
+
         var body = Expression.Block(
-            [target],
+            new[] { target },
             assignments
         );
 
         return Expression.Lambda<Func<TSource, TTarget>>(body, sourceParam).Compile();
     }
+
     
     private static Func<IEnumerable<TSource>, List<TTarget>> BuildCollectionMapper(Func<TSource, TTarget> itemMapper)
     {
@@ -136,10 +130,9 @@ public class MappingConfig<TSource, TTarget>
         Expression<Func<TTarget, TPropertyTarget>> targetProperty,
         Func<TPropertySource, TPropertyTarget>? converter = null)
     {
-        // Compile source getter
         var sourceGetter = sourceProperty.Compile();
 
-        // Parse target property
+        // Parsuje cílovou vlastnost
         if (targetProperty.Body is not MemberExpression memberExp ||
             memberExp.Member is not PropertyInfo targetProp ||
             !targetProp.CanWrite)
@@ -147,7 +140,6 @@ public class MappingConfig<TSource, TTarget>
             throw new ArgumentException("Target must be a writable property.");
         }
 
-        // Create setter using expressions
         var targetParam = Expression.Parameter(typeof(TTarget));
         var valueParam = Expression.Parameter(typeof(TPropertyTarget));
         var setterExp = Expression.Lambda<Action<TTarget, TPropertyTarget>>(
@@ -156,7 +148,7 @@ public class MappingConfig<TSource, TTarget>
         );
         var setter = setterExp.Compile();
 
-        // Add mapping with optional conversion
+        // Přidává  mapování s volitelnou konverzí (příklad je dole)
         _mappings.Add((source, target) =>
         {
             var sourceValue = sourceGetter(source);
@@ -230,5 +222,5 @@ public class MappingConfig<TSource, TTarget>
 // // Použití
 // var entity = new UserEntity { Id = 1, Name = "John", CreatedAt = DateTime.Now };
 //
-// var dto1 = mapper.Map(entity);       // Použije konfiguraci: CreatedAt → string
+// var dto1 = mapper.Map(entity);       // Použijeme konfiguraci: CreatedAt → string
 // var dto2 = mapper.MapDirect(entity); // Automatické mapování: CreatedAt → DateTime → chyba konverze!

@@ -1,11 +1,26 @@
-﻿@using DataCapture.Components.Account.Shared
-<Router AppAssembly="typeof(Program).Assembly">
-    <Found Context="routeData">
-        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
-            <NotAuthorized>
-                <RedirectToLogin/>
-            </NotAuthorized>
-        </AuthorizeRouteView>
-        <FocusOnNavigate RouteData="routeData" Selector="h1"/>
-    </Found>
-</Router>
+﻿@using Application.Abstraction
+@using DataCapture.Components.Account.Shared
+<CascadingAuthenticationState>
+    <CascadingValue Value="@SessionInfoService.Session">
+        <Router AppAssembly="typeof(Program).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                    <NotAuthorized>
+                        <RedirectToLogin/>
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+                <FocusOnNavigate RouteData="routeData" Selector="h1"/>
+            </Found>
+        </Router>
+    </CascadingValue>
+</CascadingAuthenticationState>
+
+@code {
+    [Inject] private ISessionInfoService SessionInfoService { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Po zavolání aplikace inicializujeme SessionInfo pomocí naší služby.
+        await SessionInfoService.InitializeAsync();
+    }
+}

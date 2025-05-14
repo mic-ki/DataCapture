@@ -1,4 +1,9 @@
 ﻿@page "/weather"
+@using Application.Abstraction.Mediator
+@using Application.Features.Sample
+@using Application.Features.Sample.Queries
+@using Application.Models
+@using Infrastructure.Mediator
 @attribute [StreamRendering]
 
 <PageTitle>Weather</PageTitle>
@@ -7,7 +12,7 @@
 
 <p>This component demonstrates showing data.</p>
 
-@if (forecasts == null)
+@if (samples == null)
 {
     <p>
         <em>Loading...</em>
@@ -25,7 +30,7 @@ else
         </tr>
         </thead>
         <tbody>
-        @foreach (var forecast in forecasts)
+        @*@foreach (var forecast in forecasts)
         {
             <tr>
                 <td>@forecast.Date.ToShortDateString()</td>
@@ -33,13 +38,28 @@ else
                 <td>@forecast.TemperatureF</td>
                 <td>@forecast.Summary</td>
             </tr>
+        }*@
+        @if (samples is not null)
+        {
+            foreach (var sample in samples)
+            {
+                <tr>
+                    <td>@sample.DateOfBirth.ToString()</td>
+                    <td>@sample.Name</td>
+                    <td>@sample.Description</td>
+                    <td>@sample.Age</td>
+                </tr>
+            }
         }
-        </tbody>
+    </tbody>
     </table>
 }
 
 @code {
     private WeatherForecast[]? forecasts;
+    private List<SampleDto>? samples = new();
+    private GetAllSamplesQuery _samplesQuery { get; set; } = new();
+    [Inject] private IMediator _mediator { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -54,6 +74,10 @@ else
             TemperatureC = Random.Shared.Next(-20, 55),
             Summary = summaries[Random.Shared.Next(summaries.Length)]
         }).ToArray();
+        
+        var result = await _mediator.Send(_samplesQuery).ConfigureAwait(false);
+        samples = result.Succeeded ? result.Data : new List<SampleDto>();
+
     }
 
     private class WeatherForecast

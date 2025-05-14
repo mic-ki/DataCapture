@@ -1,8 +1,9 @@
+using Application.Abstraction;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace Application.Services.Cache;
+namespace Infrastructure.Services;
 
-public class CacheService(IMemoryCache memoryCache) : ICacheService
+public class MemoryCacheService(IMemoryCache memoryCache) : ICacheService
 {
     public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
