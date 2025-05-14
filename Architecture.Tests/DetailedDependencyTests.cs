@@ -98,13 +98,6 @@ public class DetailedDependencyTests
         Assert.True(result.IsSuccessful, "Domain classes should be sealed or abstract to prevent unintended inheritance");
     }
 
-    // Removed the problematic test
-    // [Fact]
-    // public void Services_Should_DependOn_Abstractions_Not_Implementations()
-    // {
-    //     // This test is removed due to compatibility issues with NetArchTest.Rules
-    // }
-
     [Fact]
     public void Handlers_Should_Not_DependOn_Infrastructure()
     {

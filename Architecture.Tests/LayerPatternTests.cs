@@ -47,13 +47,6 @@ public class LayerPatternTests
         Assert.True(result.IsSuccessful, "Request handlers should have names ending with 'Handler'");
     }
 
-    // Removed the problematic test
-    // [Fact]
-    // public void Infrastructure_Repositories_Should_Implement_Interfaces_From_Application()
-    // {
-    //     // This test is removed due to compatibility issues with NetArchTest.Rules
-    // }
-
     [Fact]
     public void Domain_Events_Should_Inherit_From_DomainEvent()
     {

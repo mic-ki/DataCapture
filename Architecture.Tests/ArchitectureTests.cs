@@ -5,7 +5,6 @@ namespace Architecture.Tests;
 
 public class ArchitectureTests
 {
-    // Define the namespaces for each layer
     private const string DomainNamespace = "Domain";
     private const string ApplicationNamespace = "Application";
     private const string InfrastructureNamespace = "Infrastructure";
@@ -78,13 +77,7 @@ public class ArchitectureTests
     [Fact]
     public void Presentation_Should_Not_HaveDependencyOnInfrastructureImplementations()
     {
-        // This test verifies that the presentation layer doesn't directly depend on infrastructure implementations
-        // but only on interfaces defined in the application layer
-        
-        // Arrange
         var assembly = System.Reflection.Assembly.Load("DataCapture");
-        
-        // Get all types in the Infrastructure namespace that are not interfaces
         var infrastructureImplementationPattern = $"{InfrastructureNamespace}.*";
         
         // Act
