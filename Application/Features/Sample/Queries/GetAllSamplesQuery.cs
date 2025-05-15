@@ -6,9 +6,12 @@ using Domain;
 
 namespace Application.Features.Sample.Queries;
 
+/// <summary>
+/// Dotaz pro získání seznamu všech vzorových entit
+/// </summary>
 public class GetAllSamplesQuery : GetAllEntitiesQuery<SampleEntity, SampleDto>, ICachableQuery<Result<List<SampleDto>>>
 {
-    // Implementace ICachableQuery
+    // Implementace ICachableQuery - přepíšeme výchozí implementaci
     public string CacheKey => $"GetAll_{typeof(SampleEntity).Name}";
     public IEnumerable<string>? Tags => new[] { typeof(SampleEntity).Name };
 }

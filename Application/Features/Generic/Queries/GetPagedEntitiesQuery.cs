@@ -1,26 +1,85 @@
 using Application.Abstraction;
 using Application.Abstraction.Mediator;
-using Application.Exceptions;
-using Application.Features.Generic;
 using Application.Models;
-using Application.Services;
 using Application.Services.Mapper;
-using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace Application.Features.Generic.Queries;
 
+/// <summary>
+/// Základní abstraktní třída pro stránkovací dotazy entit
+/// </summary>
+/// <typeparam name="TEntity">Typ entity v databázi</typeparam>
+/// <typeparam name="TDto">Typ DTO pro výstup</typeparam>
 public abstract class GetPagedEntitiesQuery<TEntity, TDto> : IRequest<Result<PagedList<TDto>>>, ICachableQuery<Result<PagedList<TDto>>>
 {
-    public int PageNumber { get; set; } = 1;
-    public int PageSize { get; set; } = 10;
+    private int _pageNumber = 1;
+    private int _pageSize = 10;
+
+    /// <summary>
+    /// Číslo stránky (1 a více)
+    /// </summary>
+    public int PageNumber 
+    { 
+        get => _pageNumber;
+        set => _pageNumber = value < 1 ? 1 : value;
+    }
+    
+    /// <summary>
+    /// Velikost stránky (1 až 100)
+    /// </summary>
+    public int PageSize 
+    {
+        get => _pageSize;
+        set => _pageSize = value switch
+        {
+            < 1 => 10,
+            > 100 => 100,
+            _ => value
+        };
+    }
+
+    /// <summary>
+    /// Název vlastnosti podle které se má řadit
+    /// </summary>
     public string? SortBy { get; set; }
+    
+    /// <summary>
+    /// Příznak pro sestupné řazení
+    /// </summary>
     public bool SortDescending { get; set; } = false;
     
-    // Implementace ICachableQuery
-    public virtual string CacheKey => $"GetPaged_{typeof(TEntity).Name}_{PageNumber}_{PageSize}_{SortBy}_{SortDescending}";
+    /// <summary>
+    /// Implementace ICachableQuery - klíč pro cache
+    /// </summary>
+    public virtual string CacheKey
+    {
+        get
+        {
+            var key = new StringBuilder($"GetPaged_{typeof(TEntity).Name}");
+            key.Append($"_Page{PageNumber}");
+            key.Append($"_Size{PageSize}");
+            
+            if (!string.IsNullOrEmpty(SortBy))
+            {
+                key.Append($"_Sort{SortBy}");
+                if (SortDescending)
+                    key.Append("Desc");
+            }
+            
+            return key.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Implementace ICachableQuery - tagy pro invalidaci cache
+    /// </summary>
     public virtual IEnumerable<string>? Tags => new[] { typeof(TEntity).Name };
 }
 
+/// <summary>
+/// Obecný handler pro zpracování stránkovacích dotazů
+/// </summary>
 public class GetPagedEntitiesQueryHandler<TEntity, TDto>
     : IRequestHandler<GetPagedEntitiesQuery<TEntity, TDto>, Result<PagedList<TDto>>>
     where TEntity : class
@@ -39,19 +98,26 @@ public class GetPagedEntitiesQueryHandler<TEntity, TDto>
         GetPagedEntitiesQuery<TEntity, TDto> request, 
         CancellationToken cancellationToken)
     {
-        var query = _context.Set<TEntity>().AsQueryable();
-        
-        // Aplikace filtrů - přetížit v konkrétních implementacích
-        query = ApplyFilters(query, request);
-        
-        // Aplikace řazení
-        query = ApplySorting(query, request);
-        
-        // Aplikace eager loadingu - přetížit v konkrétních implementacích
-        query = ApplyIncludes(query, request);
-        
         try
         {
+            var query = _context.Set<TEntity>().AsQueryable();
+            
+            // Aplikace filtrů - přetížit v konkrétních implementacích
+            query = ApplyFilters(query, request);
+            
+            // Aplikace řazení
+            try
+            {
+                query = ApplySorting(query, request);
+            }
+            catch (Exception ex)
+            {
+                return await Result<PagedList<TDto>>.ErrorAsync($"Chyba při řazení: {ex.Message}");
+            }
+            
+            // Aplikace eager loadingu - přetížit v konkrétních implementacích
+            query = ApplyIncludes(query, request);
+            
             var pagedList = await PagedList<TDto>.CreateAsync(
                 query,
                 request.PageNumber,
@@ -63,38 +129,43 @@ public class GetPagedEntitiesQueryHandler<TEntity, TDto>
         }
         catch (Exception ex)
         {
-            return await Result<PagedList<TDto>>.ErrorAsync(ex.Message);
+            return await Result<PagedList<TDto>>.ErrorAsync($"Chyba při získávání stránkovaných dat: {ex.Message}");
         }
     }
     
+    /// <summary>
+    /// Aplikuje filtry na dotaz. Výchozí implementace neaplikuje žádné filtry.
+    /// Přetižte tuto metodu v odvozené třídě pro implementaci specifických filtrů.
+    /// </summary>
     protected virtual IQueryable<TEntity> ApplyFilters(
         IQueryable<TEntity> query, 
         GetPagedEntitiesQuery<TEntity, TDto> request)
     {
-        // Základní implementace bez filtrů
-        // Přetížit v konkrétních implementacích pro přidání filtrů
         return query;
     }
     
+    /// <summary>
+    /// Aplikuje řazení na dotaz podle zadaného názvu vlastnosti
+    /// </summary>
     protected virtual IQueryable<TEntity> ApplySorting(
         IQueryable<TEntity> query, 
         GetPagedEntitiesQuery<TEntity, TDto> request)
     {
-        // Základní implementace řazení
+        // Pokud není zadán název vlastnosti pro řazení, vrátíme dotaz beze změny
         if (string.IsNullOrEmpty(request.SortBy))
             return query;
         
-        // Dynamické řazení podle názvu vlastnosti
-        // Toto je zjednodušená implementace, v reálném projektu by bylo potřeba
-        // ošetřit více případů a možná použít Expression Trees pro typově bezpečné řazení
+        // Zjistíme, zda entita obsahuje vlastnost s daným názvem
         var propertyInfo = typeof(TEntity).GetProperty(request.SortBy);
         if (propertyInfo == null)
-            return query;
+            throw new InvalidOperationException($"Vlastnost '{request.SortBy}' nebyla nalezena na entitě {typeof(TEntity).Name}");
         
+        // Vytvoříme lambda výraz pro řazení
         var parameter = System.Linq.Expressions.Expression.Parameter(typeof(TEntity), "x");
         var property = System.Linq.Expressions.Expression.Property(parameter, propertyInfo);
         var lambda = System.Linq.Expressions.Expression.Lambda(property, parameter);
         
+        // Aplikujeme řazení (vzestupné nebo sestupné)
         var methodName = request.SortDescending ? "OrderByDescending" : "OrderBy";
         var resultExp = System.Linq.Expressions.Expression.Call(
             typeof(Queryable),
@@ -106,12 +177,14 @@ public class GetPagedEntitiesQueryHandler<TEntity, TDto>
         return query.Provider.CreateQuery<TEntity>(resultExp);
     }
     
+    /// <summary>
+    /// Aplikuje eager loading na dotaz. Výchozí implementace nepřidává žádné include.
+    /// Přetižte tuto metodu v odvozené třídě pro načtení souvisejících entit.
+    /// </summary>
     protected virtual IQueryable<TEntity> ApplyIncludes(
         IQueryable<TEntity> query, 
         GetPagedEntitiesQuery<TEntity, TDto> request)
     {
-        // Základní implementace bez eager loadingu
-        // Přetížit v konkrétních implementacích pro přidání Include
         return query;
     }
 }
